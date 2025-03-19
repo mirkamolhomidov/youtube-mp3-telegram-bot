@@ -1,6 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
-const { exec } = require('yt-dlp-exec');
+const youtubedl = require('youtube-dl-exec');
 const ytSearch = require('yt-search');
 const fs = require('fs');
 
@@ -56,7 +56,7 @@ bot.on('callback_query', async (query) => {
 
     const fileName = `${chatId}_${Date.now()}.mp3`;
 
-    exec(video.url, {
+    youtubedl(video.url, {
         output: fileName,
         extractAudio: true,
         audioFormat: 'mp3',
