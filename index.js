@@ -1,8 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { exec } = require('yt-dlp-exec');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const ytSearch = require('yt-search');
 const fs = require('fs');
 
 const TOKEN = process.env.TELEGRAM_TOKEN;
@@ -12,13 +11,11 @@ const app = express();
 
 const bot = new TelegramBot(TOKEN, { polling: false });
 
-// Webhook endpoint
 app.post('/bot', express.json(), (req, res) => {
     bot.processUpdate(req.body);
     res.sendStatus(200);
 });
 
-// Set webhook
 bot.setWebHook(`${URL}/bot`);
 
 let searchResults = {};
@@ -30,24 +27,18 @@ bot.onText(/\/start/, (msg) => {
 bot.on('message', async (msg) => {
     if (msg.text.startsWith('/start')) return;
 
-    const query = encodeURIComponent(msg.text);
-    const url = `https://www.youtube.com/results?search_query=${query}`;
-    
-    const response = await axios.get(url);
-    const $ = cheerio.load(response.data);
-    let videos = [];
+    const result = await ytSearch(msg.text);
+    const videos = result.videos.slice(0, 10);
 
-    $('a#video-title').each((i, elem) => {
-        if (i < 10) {
-            const title = $(elem).text().trim();
-            const link = 'https://www.youtube.com' + $(elem).attr('href');
-            videos.push({ title, link });
-        }
-    });
+    if (videos.length === 0) {
+        return bot.sendMessage(msg.chat.id, 'Hech narsa topilmadi.');
+    }
 
     searchResults[msg.chat.id] = videos;
 
-    let buttons = videos.map((v, i) => [{ text: `${i + 1}. ${v.title}`, callback_data: `${i}` }]);
+    let buttons = videos.map((v, i) => [{
+        text: `${i + 1}. ${v.title.substring(0, 30)}`, callback_data: `${i}`
+    }]);
 
     bot.sendMessage(msg.chat.id, 'Topilgan qo‘shiqlar:', {
         reply_markup: {
@@ -65,7 +56,7 @@ bot.on('callback_query', async (query) => {
 
     const fileName = `${chatId}_${Date.now()}.mp3`;
 
-    exec(video.link, {
+    exec(video.url, {
         output: fileName,
         extractAudio: true,
         audioFormat: 'mp3',
