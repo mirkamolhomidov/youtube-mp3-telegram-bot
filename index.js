@@ -1,4 +1,3 @@
-
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { exec } = require('yt-dlp-exec');
@@ -9,11 +8,17 @@ const fs = require('fs');
 const TOKEN = process.env.TELEGRAM_TOKEN;
 const URL = process.env.BASE_URL;
 
-const bot = new TelegramBot(TOKEN, { webHook: { port: process.env.PORT || 3000 } });
 const app = express();
 
-app.use(bot.webHookCallback('/bot'));
+const bot = new TelegramBot(TOKEN, { polling: false });
 
+// Webhook endpoint
+app.post('/bot', express.json(), (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+// Set webhook
 bot.setWebHook(`${URL}/bot`);
 
 let searchResults = {};
@@ -75,6 +80,6 @@ bot.on('callback_query', async (query) => {
     });
 });
 
-app.listen(process.env.PORT, () => {
+app.listen(process.env.PORT || 3000, () => {
     console.log('Server ishlayapti...');
 });
