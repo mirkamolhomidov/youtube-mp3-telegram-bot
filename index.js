@@ -71,7 +71,7 @@ bot.on('callback_query', async (query) => {
         const filePath = `/tmp/${videoId}.mp3`;
         console.log(`Audio yuklanmoqda: ${filePath}`);
 
-        await ytdlp(videoUrl, { output: filePath, extractAudio: true, audioFormat: 'mp3' });
+        await youtubedl(videoUrl, { output: filePath, extractAudio: true, audioFormat: 'mp3' });
 
         await bot.sendAudio(chatId, filePath);
         console.log("Yuborildi:", filePath);
