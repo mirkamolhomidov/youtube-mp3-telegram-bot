@@ -35,13 +35,15 @@ bot.on('message', async (msg) => {
             const results = await ytSearch(text);
             console.log("Natijalar topildi:", results);
 
-            if (results.length === 0) {
+            const videos = results.videos;
+
+            if (videos.length === 0) {
                 bot.sendMessage(chatId, "Hech narsa topilmadi.");
                 return;
             }
 
-            // Shu yerda tugmalar bilan natijalarni chiqarish
-            const buttons = results.slice(0, 10).map((video, index) => {
+            // Tugmalar bilan natijalarni chiqarish
+            const buttons = videos.slice(0, 10).map((video, index) => {
                 return [{ text: `${index + 1}. ${video.title}`, callback_data: video.videoId }];
             });
 
@@ -55,6 +57,7 @@ bot.on('message', async (msg) => {
         }
     }
 });
+
 
 bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
