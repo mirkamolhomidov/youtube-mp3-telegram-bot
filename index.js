@@ -17,11 +17,19 @@ app.post('/bot', express.json(), (req, res) => {
 
 bot.setWebHook(`${URL}/bot`);
 
-let searchCache = {};
+searchCache[chatId] = {
+    videos,
+    page: 1
+};
 
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
+    const currentPage = 1;
+    const pageSize = 10;
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    const pageVideos = videos.slice(start, end);
 
     if (text === '/start') {
         bot.sendMessage(chatId, "Qo'shiq nomini yuboring, YouTube’dan qidiraman!");
@@ -38,15 +46,15 @@ bot.on('message', async (msg) => {
             }
 
             // Qidiruv natijalarini matn ko‘rinishda chiqarish
-            let messageText = `🔍 Natijalar 1-10 / ${videos.length} ta topildi:\n\n`;
-            videos.slice(0, 10).forEach((video, index) => {
-                messageText += `${index + 1}. ${video.title} (${video.timestamp}) - ${video.views} views\n`;
+            let messageText = `🔍 Natijalar ${start + 1}-${Math.min(end, videos.length)} / ${videos.length} ta topildi:\n\n`;
+            pageVideos.forEach((video, index) => {
+                messageText += `${start + index + 1}. ${video.title} (${video.timestamp}) - ${video.views} views\n`;
             });
 
             // Tugmalar
             const numButtons = [];
-            for (let i = 0; i < 10; i++) {
-                numButtons.push({ text: `${i + 1}`, callback_data: `select_${videos[i].videoId}` });
+            for (let i = 0; i < pageVideos.length; i++) {
+                numButtons.push({ text: `${start + i + 1}`, callback_data: `select_${pageVideos[i].videoId}` });
             }
 
             const controlButtons = [
@@ -109,6 +117,52 @@ bot.on('callback_query', async (query) => {
             console.error("MP3 yuklashda xatolik:", error);
             bot.sendMessage(chatId, "Xatolik yuz berdi: " + error.message);
         }
+    } else if (data === 'prev' || data === 'next') {
+        const cache = searchCache[chatId];
+        if (!cache) return;
+        const selectedVideo = cache.videos.find(v => v.videoId === videoId);
+
+        const totalPages = Math.ceil(cache.videos.length / 10);
+        if (data === 'prev' && cache.page > 1) {
+            cache.page--;
+        }
+        if (data === 'next' && cache.page < totalPages) {
+            cache.page++;
+        }
+
+        const start = (cache.page - 1) * 10;
+        const end = start + 10;
+        const pageVideos = cache.videos.slice(start, end);
+
+        let messageText = `🔍 Natijalar ${start + 1}-${Math.min(end, cache.videos.length)} / ${cache.videos.length} ta topildi:\n\n`;
+        pageVideos.forEach((video, index) => {
+            messageText += `${start + index + 1}. ${video.title} (${video.timestamp}) - ${video.views} views\n`;
+        });
+
+        const numButtons = [];
+        for (let i = 0; i < pageVideos.length; i++) {
+            numButtons.push({ text: `${start + i + 1}`, callback_data: `select_${pageVideos[i].videoId}` });
+        }
+
+        const controlButtons = [
+            { text: '◀️', callback_data: 'prev' },
+            { text: '❌', callback_data: 'delete' },
+            { text: '▶️', callback_data: 'next' }
+        ];
+
+        await bot.editMessageText(messageText, {
+            chat_id: chatId,
+            message_id: query.message.message_id,
+            reply_markup: {
+                inline_keyboard: [
+                    numButtons.slice(0, 5),
+                    numButtons.slice(5, 10),
+                    controlButtons
+                ]
+            }
+        });
+
+        await bot.answerCallbackQuery(query.id);
     } else if (data === 'delete') {
         bot.deleteMessage(chatId, query.message.message_id);
     } else {
