@@ -14,7 +14,7 @@ const searchCache = {};
 
 app.post('/bot', express.json(), (req, res) => {
     bot.processUpdate(req.body);
-    res.sendStatus(200);
+    res.sendStatus(200); // Webhook so‘roviga darhol javob
 });
 
 bot.setWebHook(`${URL}/bot`);
@@ -88,7 +88,7 @@ bot.on('callback_query', async (query) => {
     const cache = searchCache[chatId];
 
     if (!cache) {
-        bot.answerCallbackQuery(query.id, { text: "Qidiruv natijasi topilmadi." });
+        await bot.answerCallbackQuery(query.id, { text: "Qidiruv natijasi topilmadi." });
         return;
     }
 
@@ -97,34 +97,39 @@ bot.on('callback_query', async (query) => {
         const selectedVideo = cache.videos.find(v => v.videoId === videoId);
 
         if (!selectedVideo) {
-            bot.sendMessage(chatId, "Video topilmadi.");
+            await bot.answerCallbackQuery(query.id, { text: "Video topilmadi." });
             return;
         }
 
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const fileName = selectedVideo.title.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 20);
-        const filePath = `/tmp/${fileName}.mp3`;
+        await bot.answerCallbackQuery(query.id, { text: "🎵 Yuklanmoqda..." }); // darhol javob
 
-        const loadingMsg = await bot.sendMessage(chatId, `🎵 Yuklanmoqda: ${selectedVideo.title}`);
+        // Yuklash jarayonini fonda bajarish
+        (async () => {
+            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            const fileName = selectedVideo.title.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 20);
+            const filePath = `/tmp/${fileName}.mp3`;
 
-        try {
-            await youtubedl(videoUrl, {
-                output: filePath,
-                extractAudio: true,
-                audioFormat: 'mp3',
-                cookies: './cookies.txt'
-            });
+            const loadingMsg = await bot.sendMessage(chatId, `🎵 Yuklanmoqda: ${selectedVideo.title}`);
 
-            await bot.sendAudio(chatId, filePath, { title: selectedVideo.title });
-            fs.unlinkSync(filePath);
+            try {
+                await youtubedl(videoUrl, {
+                    output: filePath,
+                    extractAudio: true,
+                    audioFormat: 'mp3',
+                    cookies: './cookies.txt'
+                });
 
-        } catch (error) {
-            console.error("MP3 yuklashda xatolik:", error);
-            bot.sendMessage(chatId, "Xatolik yuz berdi: " + error.message);
-        }
+                await bot.sendAudio(chatId, filePath, { title: selectedVideo.title });
+                fs.unlinkSync(filePath);
 
-        // Yuklanmoqda xabarini o'chirish
-        bot.deleteMessage(chatId, loadingMsg.message_id);
+            } catch (error) {
+                console.error("MP3 yuklashda xatolik:", error);
+                bot.sendMessage(chatId, "Xatolik yuz berdi: " + error.message);
+            }
+
+            // Yuklanmoqda xabarini o‘chirish
+            bot.deleteMessage(chatId, loadingMsg.message_id);
+        })();
 
     } else if (data === 'prev' || data === 'next') {
         const totalPages = Math.ceil(cache.videos.length / 10);
@@ -170,7 +175,8 @@ bot.on('callback_query', async (query) => {
         await bot.answerCallbackQuery(query.id);
 
     } else if (data === 'delete') {
-        bot.deleteMessage(chatId, query.message.message_id);
+        await bot.deleteMessage(chatId, query.message.message_id);
+        await bot.answerCallbackQuery(query.id);
     }
 });
 
