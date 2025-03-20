@@ -10,12 +10,15 @@ const URL = process.env.BASE_URL;
 const app = express();
 const bot = new TelegramBot(TOKEN, { polling: false });
 
+const searchCache = {};
+
 app.post('/bot', express.json(), (req, res) => {
     bot.processUpdate(req.body);
     res.sendStatus(200);
 });
 
 bot.setWebHook(`${URL}/bot`);
+
 
 searchCache[chatId] = {
     videos,
