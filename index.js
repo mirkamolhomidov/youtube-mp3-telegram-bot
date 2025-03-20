@@ -1,67 +1,90 @@
+require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
 const ytSearch = require('yt-search');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+const { PassThrough } = require('stream');
 
-const token = 'BOT_TOKEN'; // BOT TOKENINGIZ
-const bot = new TelegramBot(token, { polling: true });
+ffmpeg.setFfmpegPath(ffmpegPath);
 
-let searchCache = {};
+const TOKEN = process.env.TELEGRAM_TOKEN;
+const URL = process.env.BASE_URL;
+const PORT = process.env.PORT || 3000;
 
-bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, '🎶 YouTube → MP3 botga xush kelibsiz!\nQidiruv uchun musiqa nomini yuboring.');
+const app = express();
+const bot = new TelegramBot(TOKEN, { polling: false });
+
+bot.setWebHook(`${URL}/bot${TOKEN}`);
+
+app.use(express.json());
+app.post(`/bot${TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
+
+const searchCache = {};
 
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
-    const query = msg.text;
+    const text = msg.text;
 
-    if (query.startsWith('/')) return; // Komandalarni o'tkazib yuborish
+    if (text === '/start') {
+        return bot.sendMessage(chatId, "Qo'shiq nomini yuboring, YouTube’dan qidiraman!");
+    }
 
-    const searchingMsg = await bot.sendMessage(chatId, "🔍 Qidirilmoqda...");
+    bot.sendMessage(chatId, "🔎 Qidirilmoqda...");
 
     try {
-        const results = await ytSearch(query);
+        const results = await ytSearch(text);
         const videos = results.videos.slice(0, 20);
-
-        if (videos.length === 0) {
-            await bot.editMessageText("Hech narsa topilmadi.", { chat_id: chatId, message_id: searchingMsg.message_id });
-            return;
-        }
+        if (!videos.length) return bot.sendMessage(chatId, "Hech narsa topilmadi.");
 
         searchCache[chatId] = { videos, page: 1 };
-        await showPage(chatId, videos, 1, searchingMsg.message_id);
+
+        await sendPage(chatId, 1);
     } catch (err) {
         console.error(err);
-        await bot.editMessageText("Xatolik yuz berdi.", { chat_id: chatId, message_id: searchingMsg.message_id });
+        bot.sendMessage(chatId, "Xatolik yuz berdi.");
     }
 });
 
-async function showPage(chatId, videos, page, messageId) {
-    const start = (page - 1) * 10;
-    const end = start + 10;
-    const pageVideos = videos.slice(start, end);
+async function sendPage(chatId, page) {
+    const cache = searchCache[chatId];
+    if (!cache) return;
 
-    let message = `🔍 Natijalar ${start + 1}-${Math.min(end, videos.length)} / ${videos.length}:\n\n`;
+    const pageSize = 10;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const pageVideos = cache.videos.slice(start, end);
 
-    pageVideos.forEach((video, index) => {
-        message += `${index + 1}. ${video.title} (${video.timestamp})\n`;
+    let message = `🔍 Natijalar ${start + 1}-${Math.min(end, cache.videos.length)}:\n\n`;
+    pageVideos.forEach((v, i) => {
+        message += `${start + i + 1}. ${v.title} (${v.timestamp})\n`;
     });
 
-    const buttons = pageVideos.map((video, index) => ([{
-        text: (index + 1).toString(),
-        callback_data: `select_${video.videoId}`
-    }]));
+    const numButtons = pageVideos.map((v, i) => ({
+        text: `${start + i + 1}`,
+        callback_data: `select_${v.videoId}`
+    }));
 
-    const navButtons = [];
-    if (page > 1) navButtons.push({ text: '◀️', callback_data: 'prev' });
-    navButtons.push({ text: '❌', callback_data: 'delete' });
-    if (end < videos.length) navButtons.push({ text: '▶️', callback_data: 'next' });
+    const controlButtons = [];
+    if (page > 1) {
+        controlButtons.push({ text: '◀️ Oldingi', callback_data: 'prev' });
+    }
+    if (end < cache.videos.length) {
+        controlButtons.push({ text: 'Keyingi ▶️', callback_data: 'next' });
+    }
+    controlButtons.push({ text: '❌', callback_data: 'delete' });
 
-    buttons.push(navButtons);
-
-    await bot.editMessageText(message, {
-        chat_id: chatId,
-        message_id: messageId,
-        reply_markup: { inline_keyboard: buttons }
+    await bot.sendMessage(chatId, message, {
+        reply_markup: {
+            inline_keyboard: [
+                numButtons.slice(0, 5),
+                numButtons.slice(5, 10),
+                controlButtons
+            ]
+        }
     });
 }
 
@@ -74,35 +97,44 @@ bot.on('callback_query', async (query) => {
 
     if (data.startsWith('select_')) {
         const videoId = data.split('_')[1];
-        const video = cache.videos.find(v => v.videoId === videoId);
-        if (!video) {
-            bot.sendMessage(chatId, "Video topilmadi.");
-            return;
-        }
+        const selected = cache.videos.find(v => v.videoId === videoId);
+        if (!selected) return bot.sendMessage(chatId, "Video topilmadi.");
 
-        const downloadingMsg = await bot.sendMessage(chatId, `🎵 Yuklanmoqda: ${video.title}`);
+        const loadingMsg = await bot.sendMessage(chatId, `🎵 Yuklanmoqda: ${selected.title}`);
 
         try {
-            // MP3 API dan link
-            const mp3Url = `https://youtube-mp3-download.api-sound.xyz/api/button/mp3/${videoId}`;
+            const stream = new PassThrough();
+            ffmpeg(`https://www.youtube.com/watch?v=${videoId}`)
+                .format('mp3')
+                .audioBitrate(128)
+                .on('error', (err) => {
+                    console.error('FFMPEG Error:', err);
+                    bot.sendMessage(chatId, "Audio konvertatsiya qilishda xatolik yuz berdi.");
+                })
+                .pipe(stream);
 
-            // Foydalanuvchiga link yuborish
-            await bot.sendMessage(chatId, `🎶 <b>${video.title}</b>\n<a href="${mp3Url}">🔗 Yuklash</a>`, { parse_mode: "HTML" });
+            await bot.sendAudio(chatId, stream, { title: selected.title });
 
-            await bot.deleteMessage(chatId, downloadingMsg.message_id);
-        } catch (err) {
-            console.error(err);
-            await bot.sendMessage(chatId, "Xatolik yuz berdi.");
-            await bot.deleteMessage(chatId, downloadingMsg.message_id);
+            bot.deleteMessage(chatId, loadingMsg.message_id);
+        } catch (e) {
+            console.error(e);
+            bot.sendMessage(chatId, "Xatolik: " + e.message);
         }
-
     } else if (data === 'prev' || data === 'next') {
-        const totalPages = Math.ceil(cache.videos.length / 10);
         if (data === 'prev' && cache.page > 1) cache.page--;
-        if (data === 'next' && cache.page < totalPages) cache.page++;
-        await showPage(chatId, cache.videos, cache.page, query.message.message_id);
-        await bot.answerCallbackQuery(query.id);
+        if (data === 'next' && cache.page < Math.ceil(cache.videos.length / 10)) cache.page++;
+        await bot.editMessageText('⏳', {
+            chat_id: chatId,
+            message_id: query.message.message_id
+        });
+        await sendPage(chatId, cache.page);
     } else if (data === 'delete') {
         await bot.deleteMessage(chatId, query.message.message_id);
     }
+
+    bot.answerCallbackQuery(query.id);
+});
+
+app.listen(PORT, () => {
+    console.log(`Bot ishga tushdi: ${URL}`);
 });

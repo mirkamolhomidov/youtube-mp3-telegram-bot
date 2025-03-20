@@ -1,21 +1,17 @@
 {
   "name": "youtube-mp3-telegram-bot",
   "version": "1.0.0",
-  "description": "YouTube to MP3 Telegram bot",
+  "description": "YouTube'dan MP3 formatida audio yuklab beruvchi Telegram bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [
-    "telegram-bot",
-    "youtube",
-    "mp3",
-    "nodejs"
-  ],
-  "author": "Mirkamol Homidov",
-  "license": "MIT",
   "dependencies": {
-    "node-telegram-bot-api": "^0.61.0",
-    "yt-search": "^2.10.6"
+    "dotenv": "^16.0.0",
+    "express": "^4.17.1",
+    "fluent-ffmpeg": "^2.1.2",
+    "ffmpeg-static": "^4.2.7",
+    "node-telegram-bot-api": "^0.54.0",
+    "yt-search": "^2.10.2"
   }
 }
