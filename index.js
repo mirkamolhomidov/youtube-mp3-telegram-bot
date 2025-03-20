@@ -119,16 +119,23 @@ bot.on('callback_query', async (query) => {
                     cookies: './cookies.txt'
                 });
 
-                await bot.sendAudio(chatId, filePath, { title: selectedVideo.title });
-                fs.unlinkSync(filePath);
+                // Fayl mavjudligini tekshirish va yuborish
+                if (fs.existsSync(filePath)) {
+                    const fileStream = fs.createReadStream(filePath);
+                    await bot.sendAudio(chatId, fileStream, { title: selectedVideo.title });
+                    fs.unlinkSync(filePath); // Faylni o‘chirish
+                } else {
+                    await bot.sendMessage(chatId, "❌ Faylni yuklashda muammo yuz berdi.");
+                }
 
             } catch (error) {
                 console.error("MP3 yuklashda xatolik:", error);
-                bot.sendMessage(chatId, "Xatolik yuz berdi: " + error.message);
+                await bot.sendMessage(chatId, "Xatolik yuz berdi: " + error.message);
             }
 
             // Yuklanmoqda xabarini o‘chirish
             bot.deleteMessage(chatId, loadingMsg.message_id);
+
         })();
 
     } else if (data === 'prev' || data === 'next') {
