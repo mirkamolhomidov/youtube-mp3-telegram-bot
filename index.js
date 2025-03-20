@@ -24,7 +24,7 @@ bot.on('message', async (msg) => {
     const text = msg.text;
 
     if (text === '/start') {
-        bot.sendMessage(chatId, "Qo'shiq nomini yuboring, YouTube’dan qidiraman!");
+        bot.sendMessage(chatId, "🎶 Qidiruv uchun qo‘shiq nomini yuboring:");
         return;
     }
 
@@ -35,7 +35,7 @@ bot.on('message', async (msg) => {
         const videos = results.videos.slice(0, 30);
 
         if (videos.length === 0) {
-            await bot.editMessageText("Hech narsa topilmadi.", { chat_id: chatId, message_id: loadingMsg.message_id });
+            await bot.editMessageText("⚠️ Hech narsa topilmadi.", { chat_id: chatId, message_id: loadingMsg.message_id });
             return;
         }
 
@@ -99,23 +99,38 @@ bot.on('callback_query', async (query) => {
         }
 
         const downloadingMsg = await bot.sendMessage(chatId, `🎵 Yuklanmoqda: ${video.title}`);
-        const outputPath = path.resolve(__dirname, `${video.videoId}.mp3`);
+        const tempMp4 = path.resolve(__dirname, `${videoId}.mp4`);
+        const outputMp3 = path.resolve(__dirname, `${videoId}.mp3`);
 
         try {
+            // MP4 faylga yuklash
             const stream = ytdl(video.url, { filter: 'audioonly' });
-            ffmpeg(stream)
-                .audioBitrate(128)
-                .save(outputPath)
-                .on('end', async () => {
-                    await bot.sendAudio(chatId, outputPath, { title: video.title });
-                    fs.unlinkSync(outputPath);
-                    await bot.deleteMessage(chatId, downloadingMsg.message_id);
-                })
-                .on('error', async (err) => {
-                    console.error(err);
-                    await bot.sendMessage(chatId, "Xatolik: Yuklab olishda muammo.");
-                    await bot.deleteMessage(chatId, downloadingMsg.message_id);
-                });
+            const fileWriteStream = fs.createWriteStream(tempMp4);
+            stream.pipe(fileWriteStream);
+
+            fileWriteStream.on('finish', () => {
+                // MP3 ga aylantirish
+                ffmpeg(tempMp4)
+                    .audioBitrate(128)
+                    .save(outputMp3)
+                    .on('end', async () => {
+                        await bot.sendAudio(chatId, outputMp3, { title: video.title });
+                        fs.unlinkSync(tempMp4);
+                        fs.unlinkSync(outputMp3);
+                        await bot.deleteMessage(chatId, downloadingMsg.message_id);
+                    })
+                    .on('error', async (err) => {
+                        console.error(err);
+                        await bot.sendMessage(chatId, "Xatolik: Aylantirishda muammo.");
+                        await bot.deleteMessage(chatId, downloadingMsg.message_id);
+                    });
+            });
+
+            stream.on('error', async (err) => {
+                console.error(err);
+                await bot.sendMessage(chatId, "Xatolik: Yuklab olishda muammo.");
+                await bot.deleteMessage(chatId, downloadingMsg.message_id);
+            });
 
         } catch (err) {
             console.error(err);
@@ -124,7 +139,6 @@ bot.on('callback_query', async (query) => {
         }
 
     } else if (data === 'prev' || data === 'next') {
-        if (!cache) return;
         const totalPages = Math.ceil(cache.videos.length / 10);
         if (data === 'prev' && cache.page > 1) cache.page--;
         if (data === 'next' && cache.page < totalPages) cache.page++;
