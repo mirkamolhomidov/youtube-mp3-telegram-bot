@@ -38,36 +38,33 @@ bot.on('message', async (msg) => {
         bot.sendMessage(chatId, "Qo'shiq nomini yuboring, YouTube’dan qidiraman!");
     } else {
         bot.sendMessage(chatId, "Qidirilmoqda, biroz kuting...");
-
         try {
             const results = await ytSearch(text);
             const videos = results.videos;
-
             if (videos.length === 0) {
                 bot.sendMessage(chatId, "Hech narsa topilmadi.");
                 return;
             }
-
+            // Shu yerda:
+            searchCache[chatId] = {
+                videos,
+                page: 1
+            };
             // Qidiruv natijalarini matn ko‘rinishda chiqarish
             let messageText = `🔍 Natijalar ${start + 1}-${Math.min(end, videos.length)} / ${videos.length} ta topildi:\n\n`;
             pageVideos.forEach((video, index) => {
                 messageText += `${start + index + 1}. ${video.title} (${video.timestamp}) - ${video.views} views\n`;
             });
-
             // Tugmalar
             const numButtons = [];
             for (let i = 0; i < pageVideos.length; i++) {
                 numButtons.push({ text: `${start + i + 1}`, callback_data: `select_${pageVideos[i].videoId}` });
             }
-
             const controlButtons = [
                 { text: '◀️', callback_data: 'prev' },
                 { text: '❌', callback_data: 'delete' },
                 { text: '▶️', callback_data: 'next' }
             ];
-
-            searchCache[chatId] = videos; // Cache natijalar
-
             bot.sendMessage(chatId, messageText, {
                 reply_markup: {
                     inline_keyboard: [
