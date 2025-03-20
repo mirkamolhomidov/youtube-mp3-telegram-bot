@@ -1,16 +1,21 @@
 {
-  "name": "music-telegram-bot",
+  "name": "youtube-mp3-telegram-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for YouTube music search and download",
+  "description": "YouTube to MP3 Telegram bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
+  "keywords": [
+    "telegram-bot",
+    "youtube",
+    "mp3",
+    "nodejs"
+  ],
+  "author": "Mirkamol Homidov",
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.18.4",
     "node-telegram-bot-api": "^0.61.0",
-    "yt-search": "^2.10.7",
-    "ytdl-core": "^4.11.4",
-    "fluent-ffmpeg": "^2.1.2"
+    "yt-search": "^2.10.6"
   }
 }
