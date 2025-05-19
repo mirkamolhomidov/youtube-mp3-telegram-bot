@@ -6,6 +6,10 @@ const fs = require('fs')
 const path = require('path')
 
 const TOKEN = process.env.TELEGRAM_TOKEN
+if (!TOKEN) {
+  console.error('TELEGRAM_TOKEN topilmadi!')
+  process.exit(1)
+}
 const URL = process.env.BASE_URL
 const app = express()
 const bot = new TelegramBot(TOKEN, { polling: true })
