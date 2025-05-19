@@ -1,34 +1,32 @@
 const TelegramBot = require('node-telegram-bot-api')
-const express = require('express')
 const youtubedl = require('youtube-dl-exec')
 const ytSearch = require('yt-search')
 const fs = require('fs')
 const path = require('path')
+require('dotenv').config()
 
 const TOKEN = process.env.TELEGRAM_TOKEN
 if (!TOKEN) {
   console.error('TELEGRAM_TOKEN topilmadi!')
   process.exit(1)
 }
-const URL = process.env.BASE_URL
-const app = express()
+
 const bot = new TelegramBot(TOKEN, { polling: true })
 
 const searchCache = {}
 const userStates = {}
 
-app.use(express.json())
-app.post('/bot', (req, res) => {
-  bot.processUpdate(req.body)
-  res.sendStatus(200)
-})
-
 bot.on('message', async msg => {
   const chatId = msg.chat.id
   const text = msg.text
 
+  if (!text) return
+
   if (text === '/start') {
-    bot.sendMessage(chatId, "Qo'shiq nomini yuboring, YouTube’dan qidiraman!")
+    await bot.sendMessage(
+      chatId,
+      "Qo'shiq nomini yuboring, YouTube’dan qidiraman!"
+    )
     return
   }
 
@@ -36,11 +34,13 @@ bot.on('message', async msg => {
     chatId,
     '🔎 Qidirilmoqda, biroz kuting...'
   )
+
   try {
     const results = await ytSearch(text)
     const videos = results.videos
     if (videos.length === 0) {
       await bot.sendMessage(chatId, 'Hech narsa topilmadi.')
+      await bot.deleteMessage(chatId, loadingMessage.message_id)
       return
     }
 
@@ -54,6 +54,7 @@ bot.on('message', async msg => {
       const start = (page - 1) * pageSize
       const end = start + pageSize
       const pageVideos = videos.slice(start, end)
+
       let messageText = `🔍 Natijalar ${start + 1}-${Math.min(
         end,
         videos.length
@@ -71,11 +72,13 @@ bot.on('message', async msg => {
           callback_data: `select_${pageVideos[i].videoId}`,
         })
       }
+
       const controlButtons = [
         { text: '◀️', callback_data: 'prev' },
         { text: '❌', callback_data: 'delete' },
         { text: '▶️', callback_data: 'next' },
       ]
+
       bot.sendMessage(chatId, messageText, {
         reply_markup: {
           inline_keyboard: [
@@ -85,6 +88,7 @@ bot.on('message', async msg => {
           ],
         },
       })
+
       userStates[chatId] = {
         messageText,
         replyMarkup: [
@@ -100,6 +104,7 @@ bot.on('message', async msg => {
   } catch (err) {
     console.error('Qidiruvda xatolik:', err)
     await bot.sendMessage(chatId, 'Xatolik yuz berdi: ' + err.message)
+    await bot.deleteMessage(chatId, loadingMessage.message_id)
   }
 })
 
@@ -111,6 +116,7 @@ bot.on('callback_query', async query => {
   if (!cache) {
     await bot.answerCallbackQuery(query.id, {
       text: 'Qidiruv natijasi topilmadi.',
+      show_alert: true,
     })
     return
   }
@@ -130,7 +136,15 @@ bot.on('callback_query', async query => {
     const safeTitle = selectedVideo.title
       .replace(/[^a-zA-Z0-9_\-]/g, '_')
       .substring(0, 20)
-    const filePath = path.join('/tmp', `${safeTitle}_${Date.now()}.mp3`)
+    const filePath = path.join(
+      __dirname,
+      'tmp',
+      `${safeTitle}_${Date.now()}.mp3`
+    )
+
+    if (!fs.existsSync(path.join(__dirname, 'tmp'))) {
+      fs.mkdirSync(path.join(__dirname, 'tmp'))
+    }
 
     const loadingMsg = await bot.sendMessage(
       chatId,
@@ -142,7 +156,6 @@ bot.on('callback_query', async query => {
         output: filePath,
         extractAudio: true,
         audioFormat: 'mp3',
-        cookies: './cookies.txt',
         noCheckCertificates: true,
         noWarnings: true,
         preferFreeFormats: true,
@@ -152,6 +165,7 @@ bot.on('callback_query', async query => {
         await bot.sendAudio(chatId, fs.createReadStream(filePath), {
           title: selectedVideo.title,
         })
+
         fs.unlink(filePath, err => {
           if (err) console.error('Faylni o‘chirishda xato:', err)
         })
@@ -162,6 +176,7 @@ bot.on('callback_query', async query => {
       console.error('MP3 yuklashda xatolik:', error)
       await bot.sendMessage(chatId, 'Xatolik: ' + error.message)
     }
+
     await bot.deleteMessage(chatId, loadingMsg.message_id)
   } else if (data === 'prev' || data === 'next') {
     await bot.answerCallbackQuery(query.id)
@@ -192,6 +207,7 @@ bot.on('callback_query', async query => {
         callback_data: `select_${pageVideos[i].videoId}`,
       })
     }
+
     const controlButtons = [
       { text: '◀️', callback_data: 'prev' },
       { text: '❌', callback_data: 'delete' },
@@ -214,11 +230,11 @@ bot.on('callback_query', async query => {
       console.error('Edit xatolik:', err)
     }
   } else if (data === 'delete') {
-    await bot.deleteMessage(chatId, query.message.message_id)
+    try {
+      await bot.deleteMessage(chatId, query.message.message_id)
+    } catch (err) {
+      console.error('Delete xatolik:', err)
+    }
     await bot.answerCallbackQuery(query.id)
   }
-})
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Server ishlayapti...')
 })
