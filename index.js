@@ -22,7 +22,6 @@ app.post('/bot', (req, res) => {
   bot.processUpdate(req.body)
   res.sendStatus(200)
 })
-bot.setWebHook(`${URL}/bot`)
 
 bot.on('message', async msg => {
   const chatId = msg.chat.id
